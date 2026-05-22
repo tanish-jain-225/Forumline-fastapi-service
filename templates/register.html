@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>Create your account</h1>
+    <p>Start threads, comment, and build your profile.</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="banner error-banner">
+    <span class="material-icons">error_outline</span>
+    <p>{{ error }}</p>
+  </div>
+{% endif %}
+
+<form class="form-card" method="post" action="/register">
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" placeholder="you@example.com" value="{{ email or '' }}" required />
+
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" placeholder="Create a password" required />
+
+  <button class="cta" type="submit">Sign Up</button>
+</form>
+{% endblock %}

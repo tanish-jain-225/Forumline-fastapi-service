@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>{{ thread.title }}</h1>
+    <p>{{ thread.body }}</p>
+  </div>
+  <div class="card">
+    <p class="muted">Posted by {{ thread.user.email }}</p>
+    <p class="muted">Category: {{ thread.category.name }}</p>
+  </div>
+</section>
+
+<section>
+  <div class="section-title">Comments</div>
+  <div class="thread-list">
+    {% for comment in comments %}
+      <div class="thread-item">
+        <p>{{ comment.body }}</p>
+        <div class="thread-meta">
+          <span>{{ comment.user.email }}</span>
+          <span>{{ comment.created_at.strftime("%b %d, %Y %H:%M") }}</span>
+        </div>
+      </div>
+    {% else %}
+      <div class="thread-item">No comments yet.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<section>
+  <div class="section-title">Add a comment</div>
+  {% if request.state.user %}
+    <form class="form-card" method="post" action="/t/{{ thread.id }}/comment">
+      <label for="body">Comment</label>
+      <textarea id="body" name="body" placeholder="Share your take" required></textarea>
+      <button class="cta" type="submit">Post Comment</button>
+    </form>
+  {% else %}
+    <div class="card" style="text-align: center; padding: 24px;">
+      <p class="muted">You must be <a href="/login" style="color: var(--accent); font-weight: 600; text-decoration: underline;">logged in</a> to write a comment.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

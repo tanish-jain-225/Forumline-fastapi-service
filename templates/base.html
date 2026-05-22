@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or "Forum" }}</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=Space+Grotesk:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+    <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
+  </head>
+  <body>
+    <header>
+      <nav class="nav">
+        <a href="/" class="brand">
+          <img src="/static/logo/logo.png" alt="Forumline logo" class="brand-logo" />
+          <span>Forumline</span>
+        </a>
+        <div class="nav-links">
+          <a href="/">Home</a>
+          <a href="/posts">Media Feed</a>
+          {% if request.state.user %}
+            <a href="/new">New Thread</a>
+            <a href="/categories/new">New Category</a>
+            <span class="user-badge" title="{{ request.state.user.email }}">
+              <span class="material-icons">account_circle</span>
+              <span class="user-email-text">{{ request.state.user.email.split('@')[0] }}</span>
+            </span>
+            <a href="/logout" class="btn-logout">Log Out</a>
+          {% else %}
+            <a href="/login">Log In</a>
+            <a href="/register">Sign Up</a>
+          {% endif %}
+        </div>
+      </nav>
+    </header>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+    <footer>
+      Built with FastAPI. Keep it kind, keep it curious.
+    </footer>
+    <script>
+      (function () {
+        let main = document.querySelector("main");
+
+        function isSameOrigin(url) {
+          return new URL(url, window.location.href).origin === window.location.origin;
+        }
+
+        function runScripts(container) {
+          const scripts = container.querySelectorAll("script");
+          scripts.forEach((oldScript) => {
+            const newScript = document.createElement("script");
+            for (const attr of oldScript.attributes) {
+              newScript.setAttribute(attr.name, attr.value);
+            }
+            newScript.text = oldScript.textContent || "";
+            oldScript.replaceWith(newScript);
+          });
+        }
+
+        async function swapTo(url, options) {
+          const config = {
+            method: "GET",
+            body: null,
+            push: true,
+            ...options,
+          };
+
+          const response = await fetch(url, {
+            method: config.method,
+            body: config.body,
+            headers: {
+              "X-Requested-With": "spa",
+              "Accept": "text/html",
+            },
+            credentials: "same-origin",
+          });
+
+          if (!response.ok) {
+            window.location.href = url;
+            return;
+          }
+
+          const html = await response.text();
+          const doc = new DOMParser().parseFromString(html, "text/html");
+          const nextMain = doc.querySelector("main");
+
+          if (!nextMain) {
+            window.location.href = url;
+            return;
+          }
+
+          document.title = doc.title || document.title;
+          main.replaceWith(nextMain);
+          main = nextMain;
+          runScripts(nextMain);
+
+          if (config.push) {
+            history.pushState({}, "", response.url || url);
+          }
+
+          window.scrollTo(0, 0);
+        }
+
+        document.addEventListener("click", (event) => {
+          const link = event.target.closest("a");
+          if (!link) return;
+
+          if (
+            link.target === "_blank" ||
+            link.hasAttribute("download") ||
+            link.hasAttribute("data-no-spa")
+          ) {
+            return;
+          }
+
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+            return;
+          }
+
+          const href = link.getAttribute("href");
+          if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) {
+            return;
+          }
+
+          const url = new URL(href, window.location.href).toString();
+          if (!isSameOrigin(url)) return;
+
+          event.preventDefault();
+          swapTo(url);
+        });
+
+        document.addEventListener("submit", (event) => {
+          const form = event.target;
+          if (!(form instanceof HTMLFormElement)) return;
+          if (form.hasAttribute("data-no-spa")) return;
+
+          const action = form.getAttribute("action") || window.location.href;
+          const url = new URL(action, window.location.href).toString();
+          if (!isSameOrigin(url)) return;
+
+          event.preventDefault();
+
+          const method = (form.getAttribute("method") || "GET").toUpperCase();
+          const formData = new FormData(form);
+
+          if (method === "GET") {
+            const params = new URLSearchParams(formData);
+            const dest = url.split("?")[0] + (params.toString() ? `?${params.toString()}` : "");
+            swapTo(dest);
+            return;
+          }
+
+          swapTo(url, { method, body: formData });
+        });
+
+        window.addEventListener("popstate", () => {
+          swapTo(window.location.href, { push: false });
+        });
+      })();
+    </script>
+  </body>
+</html>

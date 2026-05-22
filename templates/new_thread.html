@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>Start a new thread</h1>
+    <p>Bring questions, updates, and discoveries. This is your community timeline.</p>
+  </div>
+</section>
+
+<form class="form-card" method="post" action="/new">
+  <label for="title">Title</label>
+  <input id="title" name="title" placeholder="What is on your mind?" required />
+
+  <label for="body">Body</label>
+  <textarea id="body" name="body" placeholder="Share the full story" required></textarea>
+
+  <label for="category_id">Category</label>
+  <select id="category_id" name="category_id" required>
+    {% for category in categories %}
+      <option value="{{ category.id }}">{{ category.name }}</option>
+    {% else %}
+      <option disabled>No categories yet</option>
+    {% endfor %}
+  </select>
+
+  <button class="cta" type="submit">Publish Thread</button>
+</form>
+{% endblock %}

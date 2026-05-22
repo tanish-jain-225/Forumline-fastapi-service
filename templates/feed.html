@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>Media Feed</h1>
+    <p>Share and explore photos, videos, and project updates with the community.</p>
+  </div>
+</section>
+
+{% if request.state.user %}
+  <section class="feed-upload-section">
+    <div class="section-title">Share Something</div>
+    <form class="form-card" method="post" action="/upload" enctype="multipart/form-data">
+      <div class="form-group">
+        <label for="file">Choose Image or Video</label>
+        <input id="file" name="file" type="file" accept="image/*,video/*" required />
+      </div>
+
+      <div class="form-group">
+        <label for="caption">Caption</label>
+        <input id="caption" name="caption" type="text" placeholder="Give your post a title/caption" required />
+      </div>
+
+      <div class="form-group">
+        <label for="content">Description</label>
+        <textarea id="content" name="content" placeholder="Share more details about this post..." required></textarea>
+      </div>
+
+      <button class="cta" type="submit">
+        <span class="material-icons">cloud_upload</span> Upload Post
+      </button>
+    </form>
+  </section>
+{% else %}
+  <div class="card" style="text-align: center; margin-bottom: 40px; padding: 24px;">
+    <p class="muted">You must be <a href="/login" style="color: var(--accent); font-weight: 600; text-decoration: underline;">logged in</a> to upload images or videos.</p>
+  </div>
+{% endif %}
+
+<section>
+  <div class="section-title">Recent Uploads</div>
+  <div class="feed-grid">
+    {% for post in posts %}
+      <div class="feed-card" id="post-card-{{ post.id }}">
+        <div class="feed-media-container">
+          {% if post.file_type == "video" %}
+            <video class="feed-media" controls src="{{ post.url }}"></video>
+          {% else %}
+            <img class="feed-media" src="{{ post.url }}" alt="{{ post.caption }}" loading="lazy" />
+          {% endif %}
+        </div>
+        
+        <div class="feed-card-body">
+          <h3 class="feed-caption" id="caption-text-{{ post.id }}">{{ post.caption }}</h3>
+          <p class="feed-content" id="content-text-{{ post.id }}">{{ post.content }}</p>
+          
+          <div class="feed-meta">
+            <span class="user-badge-small">
+              <span class="material-icons">account_circle</span>
+              {{ post.user.email }}
+            </span>
+            <span class="feed-date">
+              <span class="material-icons">schedule</span>
+              {{ post.created_at.strftime("%b %d, %Y") }}
+            </span>
+          </div>
+
+          {% if request.state.user and request.state.user.id == post.user_id %}
+            <div class="feed-actions">
+              <button class="btn-icon edit-btn" onclick="toggleEdit('{{ post.id }}')">
+                <span class="material-icons">edit</span> Edit
+              </button>
+              <button class="btn-icon delete-btn" onclick="deletePost('{{ post.id }}')">
+                <span class="material-icons">delete</span> Delete
+              </button>
+            </div>
+
+            <!-- Inline Edit Form (Hidden by Default) -->
+            <div class="edit-form-container" id="edit-form-{{ post.id }}" style="display: none;">
+              <hr class="divider" />
+              <div class="form-group">
+                <label>Edit Caption</label>
+                <input id="edit-caption-{{ post.id }}" type="text" value="{{ post.caption }}" />
+              </div>
+              <div class="form-group">
+                <label>Edit Description</label>
+                <textarea id="edit-content-{{ post.id }}">{{ post.content }}</textarea>
+              </div>
+              <div class="edit-form-actions">
+                <button class="cta save-btn" onclick="saveEdit('{{ post.id }}')">Save</button>
+                <button class="btn-secondary" onclick="toggleEdit('{{ post.id }}')">Cancel</button>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    {% else %}
+      <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+        <span class="material-icons" style="font-size: 48px; color: var(--stone); margin-bottom: 12px;">photo_library</span>
+        <p class="muted">No posts yet. Be the first to share something!</p>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<script>
+  function toggleEdit(postId) {
+    const form = document.getElementById(`edit-form-${postId}`);
+    if (form.style.display === 'none') {
+      form.style.display = 'block';
+    } else {
+      form.style.display = 'none';
+    }
+  }
+
+  async function saveEdit(postId) {
+    const caption = document.getElementById(`edit-caption-${postId}`).value;
+    const content = document.getElementById(`edit-content-${postId}`).value;
+
+    const formData = new FormData();
+    formData.append('caption', caption);
+    formData.append('content', content);
+
+    try {
+      const response = await fetch(`/posts/${postId}`, {
+        method: 'PATCH',
+        body: formData
+      });
+
+      if (response.ok) {
+        document.getElementById(`caption-text-${postId}`).innerText = caption;
+        document.getElementById(`content-text-${postId}`).innerText = content;
+        toggleEdit(postId);
+      } else {
+        const err = await response.json();
+        alert('Error updating post: ' + (err.detail || 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Network error: ' + e);
+    }
+  }
+
+  async function deletePost(postId) {
+    if (!confirm('Are you sure you want to delete this post?')) return;
+
+    try {
+      const response = await fetch(`/posts/${postId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        const card = document.getElementById(`post-card-${postId}`);
+        card.style.opacity = 0;
+        setTimeout(() => card.remove(), 400);
+      } else {
+        const err = await response.json();
+        alert('Error deleting post: ' + (err.detail || 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Network error: ' + e);
+    }
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>Create a Category</h1>
+    <p>Define a new space for conversations, updates, or specific topics.</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="banner error-banner">
+    <span class="material-icons">error_outline</span>
+    <p>{{ error }}</p>
+  </div>
+{% endif %}
+
+<form class="form-card" method="post" action="/categories/new">
+  <div class="form-group">
+    <label for="name">Category Name</label>
+    <input id="name" name="name" type="text" placeholder="e.g. Technology, Random Chat" value="{{ name or '' }}" required />
+  </div>
+
+  <div class="form-group">
+    <label for="description">Description</label>
+    <textarea id="description" name="description" placeholder="What should people post here? Keep it brief." required>{{ description or '' }}</textarea>
+  </div>
+
+  <button class="cta" type="submit">
+    <span class="material-icons">add_box</span> Create Category
+  </button>
+</form>
+{% endblock %}

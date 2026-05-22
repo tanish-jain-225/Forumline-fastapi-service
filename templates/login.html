@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>Welcome back</h1>
+    <p>Log in to publish, comment, and join the community.</p>
+  </div>
+</section>
+
+{% if error %}
+  <div class="banner error-banner">
+    <span class="material-icons">error_outline</span>
+    <p>{{ error }}</p>
+  </div>
+{% endif %}
+
+{% if registered %}
+  <div class="banner success-banner">
+    <span class="material-icons">check_circle_outline</span>
+    <p>Registration successful! Please log in.</p>
+  </div>
+{% endif %}
+
+<form class="form-card" method="post" action="/login">
+  <label for="username">Email</label>
+  <input id="username" name="username" type="email" placeholder="you@example.com" value="{{ username or '' }}" required />
+
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" placeholder="Your password" required />
+
+  <button class="cta" type="submit">Log In</button>
+</form>
+{% endblock %}

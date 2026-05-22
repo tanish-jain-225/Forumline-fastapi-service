@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>{{ title }}</h1>
+    <p>{{ subtitle }}</p>
+  </div>
+  <div>
+    <a class="cta" href="/new">Start a Thread</a>
+  </div>
+</section>
+
+<section>
+  <div class="section-title">Categories</div>
+  <div class="grid two">
+    {% for category in categories %}
+      <a class="card" href="/c/{{ category.id }}">
+        <h3>{{ category.name }}</h3>
+        <p class="muted">{{ category.description or "No description yet." }}</p>
+      </a>
+    {% else %}
+      <div class="card">No categories yet. Create your first thread.</div>
+    {% endfor %}
+  </div>
+</section>
+
+<section>
+  <div class="section-title">Latest Threads</div>
+  <div class="thread-list">
+    {% for thread in threads %}
+      <a class="thread-item" href="/t/{{ thread.id }}">
+        <h3>{{ thread.title }}</h3>
+        <p class="muted">{{ thread.body[:160] }}{% if thread.body|length > 160 %}...{% endif %}</p>
+        <div class="thread-meta">
+          <span>By {{ thread.user.email }}</span>
+          <span>Category: {{ thread.category.name }}</span>
+          <span>{{ thread.created_at.strftime("%b %d, %Y") }}</span>
+        </div>
+      </a>
+    {% else %}
+      <div class="thread-item">No threads yet. Be the first to post.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
