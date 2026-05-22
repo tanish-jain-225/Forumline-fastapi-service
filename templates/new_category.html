@@ -18,11 +18,13 @@
   <div class="form-group">
     <label for="name">Category Name</label>
     <input id="name" name="name" type="text" placeholder="e.g. Technology, Random Chat" value="{{ name or '' }}" required />
+    <p class="field-hint">Make it specific and easy to spot.</p>
   </div>
 
   <div class="form-group">
     <label for="description">Description</label>
     <textarea id="description" name="description" placeholder="What should people post here? Keep it brief." required>{{ description or '' }}</textarea>
+    <p class="field-hint">A one-liner that sets expectations.</p>
   </div>
 
   <button class="cta" type="submit">

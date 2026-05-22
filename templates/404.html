@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>Page not found</h1>
+    <p>We could not find that page. Try heading back home or start something new.</p>
+  </div>
+  <div>
+    <a class="cta" href="/">Back to Home</a>
+  </div>
+</section>
+
+<div class="card empty-card" style="text-align: center;">
+  <h3>Lost in the threads?</h3>
+  <p class="muted">Start a fresh conversation or explore the latest updates.</p>
+  <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 16px;">
+    <a class="btn-secondary" href="/posts">Browse Media Feed</a>
+    <a class="cta" href="/new">Start a Thread</a>
+  </div>
+</div>
+{% endblock %}

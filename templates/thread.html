@@ -11,8 +11,15 @@
   </div>
 </section>
 
+{% if request.query_params.get('created') %}
+  <div class="banner success-banner">
+    <span class="material-icons">check_circle_outline</span>
+    <p>Thread published successfully.</p>
+  </div>
+{% endif %}
+
 <section>
-  <div class="section-title">Comments</div>
+  <div class="section-title">Comments ({{ comments|length }})</div>
   <div class="thread-list">
     {% for comment in comments %}
       <div class="thread-item">
@@ -23,7 +30,10 @@
         </div>
       </div>
     {% else %}
-      <div class="thread-item">No comments yet.</div>
+      <div class="thread-item empty-card">
+        <h3>No comments yet</h3>
+        <p class="muted">Be the first to reply and keep the conversation moving.</p>
+      </div>
     {% endfor %}
   </div>
 </section>

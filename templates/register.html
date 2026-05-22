@@ -17,9 +17,11 @@
 <form class="form-card" method="post" action="/register">
   <label for="email">Email</label>
   <input id="email" name="email" type="email" placeholder="you@example.com" value="{{ email or '' }}" required />
+  <p class="field-hint">This will be used to sign in and display your handle.</p>
 
   <label for="password">Password</label>
   <input id="password" name="password" type="password" placeholder="Create a password" required />
+  <p class="field-hint">Use at least 8 characters for better security.</p>
 
   <button class="cta" type="submit">Sign Up</button>
 </form>

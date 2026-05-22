@@ -13,7 +13,8 @@ from app.schemas import (
     CommentRead,
 )
 from contextlib import asynccontextmanager
-from sqlalchemy import select
+from sqlalchemy import select, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.images import imageKit
@@ -28,6 +29,7 @@ from app.auth import (
 )
 from app.schemas import UserCreate
 from fastapi_users.exceptions import UserAlreadyExists
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import uuid
 import shutil
@@ -35,6 +37,14 @@ import os
 import tempfile
 import subprocess
 import sys
+
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", "20971520"))
+
+
+def normalize_paging(limit: int, offset: int, max_limit: int = 50) -> tuple[int, int]:
+    safe_limit = max(1, min(limit, max_limit))
+    safe_offset = max(0, offset)
+    return safe_limit, safe_offset
 
 def run_migrations():
     try:
@@ -67,14 +77,24 @@ app = FastAPI(lifespan=lifespan, dependencies=[Depends(populate_user_state)])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+def render_error_response(request: Request, status_code: int, detail: str):
+    accept = request.headers.get("accept", "")
+    if status_code == 401 and "text/html" in accept:
+        return RedirectResponse(url="/login", status_code=303)
+    if status_code == 404 and "text/html" in accept:
+        return templates.TemplateResponse(request, "404.html", {"title": "Page not found"}, status_code=404)
+    return JSONResponse(status_code=status_code, content={"detail": detail})
+
+
 # Error handler to redirect HTML clients to login page on 401 Unauthorized
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    if exc.status_code == 401:
-        accept = request.headers.get("accept", "")
-        if "text/html" in accept:
-            return RedirectResponse(url="/login", status_code=303)
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return render_error_response(request, exc.status_code, exc.detail)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def starlette_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return render_error_response(request, exc.status_code, exc.detail)
 
 cookie_auth_router = fastapi_users.get_auth_router(cookie_backend)
 
@@ -156,16 +176,44 @@ async def register_submit(
 
 
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request, session: AsyncSession = Depends(get_async_session)):
+async def home(
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+    q: str | None = None,
+    category: str | None = None,
+    limit: int = 10,
+    offset: int = 0,
+):
+    limit, offset = normalize_paging(limit, offset, max_limit=25)
     categories = (await session.execute(select(Category).order_by(Category.name))).scalars().all()
-    threads = (
-        await session.execute(
-            select(Thread)
-            .options(selectinload(Thread.user), selectinload(Thread.category))
-            .order_by(Thread.created_at.desc())
-            .limit(10)
+
+    thread_query = (
+        select(Thread)
+        .options(selectinload(Thread.user), selectinload(Thread.category))
+        .order_by(Thread.created_at.desc())
+    )
+
+    selected_category = None
+    if category:
+        try:
+            selected_category = uuid.UUID(category)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid category filter")
+        thread_query = thread_query.where(Thread.category_id == selected_category)
+
+    if q:
+        search_term = f"%{q.strip()}%"
+        thread_query = thread_query.where(
+            or_(Thread.title.ilike(search_term), Thread.body.ilike(search_term))
         )
+
+    threads_result = (
+        await session.execute(thread_query.offset(offset).limit(limit + 1))
     ).scalars().all()
+    has_next = len(threads_result) > limit
+    threads = threads_result[:limit]
+    has_prev = offset > 0
+
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -174,6 +222,14 @@ async def home(request: Request, session: AsyncSession = Depends(get_async_sessi
             "subtitle": "A community feed for thoughtful conversations and quick updates.",
             "categories": categories,
             "threads": threads,
+            "query": q or "",
+            "selected_category": str(selected_category) if selected_category else "",
+            "has_next": has_next,
+            "has_prev": has_prev,
+            "next_offset": offset + limit,
+            "prev_offset": max(0, offset - limit),
+            "limit": limit,
+            "offset": offset,
         },
     )
 
@@ -183,27 +239,44 @@ async def category_view(
     request: Request,
     category_id: str,
     session: AsyncSession = Depends(get_async_session),
+    limit: int = 10,
+    offset: int = 0,
 ):
+    limit, offset = normalize_paging(limit, offset, max_limit=25)
     category_uuid = uuid.UUID(category_id)
     category = (await session.execute(select(Category).where(Category.id == category_uuid))).scalars().first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
-    threads = (
+    categories = (await session.execute(select(Category).order_by(Category.name))).scalars().all()
+    threads_result = (
         await session.execute(
             select(Thread)
             .options(selectinload(Thread.user), selectinload(Thread.category))
             .where(Thread.category_id == category_uuid)
             .order_by(Thread.created_at.desc())
+            .offset(offset)
+            .limit(limit + 1)
         )
     ).scalars().all()
+    has_next = len(threads_result) > limit
+    threads = threads_result[:limit]
+    has_prev = offset > 0
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "title": f"{category.name}",
             "subtitle": category.description or "Threads in this category.",
-            "categories": [category],
+            "categories": categories,
             "threads": threads,
+            "query": "",
+            "selected_category": str(category.id),
+            "has_next": has_next,
+            "has_prev": has_prev,
+            "next_offset": offset + limit,
+            "prev_offset": max(0, offset - limit),
+            "limit": limit,
+            "offset": offset,
         },
     )
 
@@ -259,6 +332,42 @@ async def new_thread_form(
     )
 
 
+@app.get("/categories/new", response_class=HTMLResponse)
+async def new_category_form(
+    request: Request,
+    user: User = Depends(current_active_user),
+):
+    return templates.TemplateResponse(request, "new_category.html", {})
+
+
+@app.post("/categories/new")
+async def new_category_submit(
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(...),
+    session: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    category = Category(name=name, description=description)
+    session.add(category)
+
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        return templates.TemplateResponse(
+            request,
+            "new_category.html",
+            {
+                "error": "Category name already exists.",
+                "name": name,
+                "description": description,
+            },
+        )
+
+    return RedirectResponse(url="/", status_code=303)
+
+
 @app.post("/new")
 async def new_thread_submit(
     title: str = Form(...),
@@ -312,11 +421,23 @@ async def upload_file(
     temp_file_path = None
 
     try:
+        caption = caption.strip()
+        content = content.strip()
+        if not caption or not content:
+            raise HTTPException(status_code=400, detail="Caption and description are required")
+
+        content_type = (file.content_type or "").lower()
+        if not content_type.startswith("image/") and not content_type.startswith("video/"):
+            raise HTTPException(status_code=400, detail="Only images or videos are allowed")
+
         filename = file.filename or "upload.bin"
         suffix = os.path.splitext(filename)[1] or ".bin"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             temp_file_path = temp_file.name
             shutil.copyfileobj(file.file, temp_file)
+
+        if temp_file_path and os.path.getsize(temp_file_path) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="File is too large")
 
         url = None
         file_name = None
@@ -397,6 +518,115 @@ async def upload_file(
         if temp_file_path and os.path.exists(temp_file_path):
             os.unlink(temp_file_path)
         file.file.close()
+
+
+@app.get("/posts", response_class=HTMLResponse)
+async def feed_page(
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+    limit: int = 24,
+    offset: int = 0,
+):
+    limit, offset = normalize_paging(limit, offset, max_limit=50)
+    posts_result = (
+        await session.execute(
+            select(Post)
+            .options(selectinload(Post.user))
+            .order_by(Post.created_at.desc())
+            .offset(offset)
+            .limit(limit + 1)
+        )
+    ).scalars().all()
+    has_next = len(posts_result) > limit
+    has_prev = offset > 0
+
+    return templates.TemplateResponse(
+        request,
+        "feed.html",
+        {
+            "posts": posts_result[:limit],
+            "has_next": has_next,
+            "has_prev": has_prev,
+            "next_offset": offset + limit,
+            "prev_offset": max(0, offset - limit),
+            "limit": limit,
+            "offset": offset,
+            "max_upload_bytes": MAX_UPLOAD_BYTES,
+        },
+    )
+
+
+@app.get("/feed")
+async def feed_api(
+    session: AsyncSession = Depends(get_async_session),
+    limit: int = 50,
+    offset: int = 0,
+):
+    posts = (
+        await session.execute(
+            select(Post)
+            .options(selectinload(Post.user))
+            .order_by(Post.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+    ).scalars().all()
+
+    return {
+        "posts": [
+            PostRead.model_validate(post).model_dump(mode="json")
+            for post in posts
+        ]
+    }
+
+
+@app.patch("/posts/{post_id}")
+async def update_post(
+    post_id: str,
+    caption: str | None = Form(None),
+    content: str | None = Form(None),
+    session: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    post_uuid = uuid.UUID(post_id)
+    post = (await session.execute(select(Post).where(Post.id == post_uuid))).scalars().first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to edit this post")
+
+    if caption is not None:
+        trimmed = caption.strip()
+        if not trimmed:
+            raise HTTPException(status_code=400, detail="Caption cannot be empty")
+        post.caption = trimmed
+
+    if content is not None:
+        trimmed = content.strip()
+        if not trimmed:
+            raise HTTPException(status_code=400, detail="Content cannot be empty")
+        post.content = trimmed
+
+    await session.commit()
+    return {"detail": "Post updated successfully"}
+
+
+@app.delete("/posts/{post_id}")
+async def delete_post(
+    post_id: str,
+    session: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    post_uuid = uuid.UUID(post_id)
+    post = (await session.execute(select(Post).where(Post.id == post_uuid))).scalars().first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this post")
+
+    await session.delete(post)
+    await session.commit()
+    return {"detail": "Post deleted successfully"}
 
 @app.get("/feed", response_model=dict[str, list[PostRead]])
 async def get_feed(session: AsyncSession = Depends(get_async_session)):
@@ -618,4 +848,4 @@ async def create_category_submit(
     category = Category(name=name, description=description)
     session.add(category)
     await session.commit()
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/?category=created", status_code=303)

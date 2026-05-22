@@ -5,30 +5,56 @@
     <h1>Media Feed</h1>
     <p>Share and explore photos, videos, and project updates with the community.</p>
   </div>
+  {% if request.state.user %}
+    <div>
+      <a class="cta" href="#upload">Upload a Post</a>
+    </div>
+  {% else %}
+    <div>
+      <a class="cta" href="/login">Log in to Upload</a>
+    </div>
+  {% endif %}
 </section>
 
 {% if request.state.user %}
-  <section class="feed-upload-section">
+  <section class="feed-upload-section" id="upload">
     <div class="section-title">Share Something</div>
-    <form class="form-card" method="post" action="/upload" enctype="multipart/form-data">
+    <form
+      class="form-card"
+      id="upload-form"
+      method="post"
+      action="/upload"
+      enctype="multipart/form-data"
+      data-max-bytes="{{ max_upload_bytes }}"
+      data-no-spa
+    >
       <div class="form-group">
         <label for="file">Choose Image or Video</label>
         <input id="file" name="file" type="file" accept="image/*,video/*" required />
+        <p class="field-hint">Uploads are public. Keep it clean and on-topic.</p>
       </div>
 
       <div class="form-group">
         <label for="caption">Caption</label>
         <input id="caption" name="caption" type="text" placeholder="Give your post a title/caption" required />
+        <p class="field-hint">Short and memorable works best.</p>
       </div>
 
       <div class="form-group">
         <label for="content">Description</label>
         <textarea id="content" name="content" placeholder="Share more details about this post..." required></textarea>
+        <p class="field-hint">Add context or a quick story.</p>
       </div>
 
       <button class="cta" type="submit">
         <span class="material-icons">cloud_upload</span> Upload Post
       </button>
+      <div class="upload-progress" aria-live="polite">
+        <div class="upload-progress-track">
+          <div class="upload-progress-fill" id="upload-progress-fill"></div>
+        </div>
+        <span class="upload-progress-text" id="upload-status">Ready to upload.</span>
+      </div>
     </form>
   </section>
 {% else %}
@@ -52,7 +78,7 @@
         
         <div class="feed-card-body">
           <h3 class="feed-caption" id="caption-text-{{ post.id }}">{{ post.caption }}</h3>
-          <p class="feed-content" id="content-text-{{ post.id }}">{{ post.content }}</p>
+          <p class="feed-content clamp-4" id="content-text-{{ post.id }}">{{ post.content }}</p>
           
           <div class="feed-meta">
             <span class="user-badge-small">
@@ -95,13 +121,32 @@
         </div>
       </div>
     {% else %}
-      <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 40px;">
-        <span class="material-icons" style="font-size: 48px; color: var(--stone); margin-bottom: 12px;">photo_library</span>
-        <p class="muted">No posts yet. Be the first to share something!</p>
+      <div class="card empty-card" style="grid-column: 1 / -1; text-align: center; padding: 40px;">
+        <span class="material-icons" style="font-size: 48px; color: var(--ink-soft); margin-bottom: 12px;">photo_library</span>
+        <h3>No posts yet</h3>
+        <p class="muted">Share the first update and set the vibe.</p>
+        {% if request.state.user %}
+          <a class="cta" href="#upload">Create the first post</a>
+        {% else %}
+          <a class="cta" href="/register">Sign up to share</a>
+        {% endif %}
       </div>
     {% endfor %}
   </div>
 </section>
+
+{% if has_prev or has_next %}
+  {% set base_url = request.url.include_query_params(limit=limit) %}
+  <div class="pagination">
+    {% if has_prev %}
+      <a class="btn-secondary" href="{{ base_url.include_query_params(offset=prev_offset) }}">Previous</a>
+    {% endif %}
+    <span class="muted">Page {{ (offset // limit) + 1 }}</span>
+    {% if has_next %}
+      <a class="btn-secondary" href="{{ base_url.include_query_params(offset=next_offset) }}">Next</a>
+    {% endif %}
+  </div>
+{% endif %}
 
 <script>
   function toggleEdit(postId) {
@@ -131,12 +176,19 @@
         document.getElementById(`caption-text-${postId}`).innerText = caption;
         document.getElementById(`content-text-${postId}`).innerText = content;
         toggleEdit(postId);
+        if (window.forumToast) {
+          window.forumToast("Post updated.", "toast-success");
+        }
       } else {
         const err = await response.json();
-        alert('Error updating post: ' + (err.detail || 'Unknown error'));
+        if (window.forumToast) {
+          window.forumToast(err.detail || "Error updating post.", "toast-error");
+        }
       }
     } catch (e) {
-      alert('Network error: ' + e);
+      if (window.forumToast) {
+        window.forumToast("Network error. Please try again.", "toast-error");
+      }
     }
   }
 
@@ -152,13 +204,94 @@
         const card = document.getElementById(`post-card-${postId}`);
         card.style.opacity = 0;
         setTimeout(() => card.remove(), 400);
+        if (window.forumToast) {
+          window.forumToast("Post deleted.", "toast-success");
+        }
       } else {
         const err = await response.json();
-        alert('Error deleting post: ' + (err.detail || 'Unknown error'));
+        if (window.forumToast) {
+          window.forumToast(err.detail || "Error deleting post.", "toast-error");
+        }
       }
     } catch (e) {
-      alert('Network error: ' + e);
+      if (window.forumToast) {
+        window.forumToast("Network error. Please try again.", "toast-error");
+      }
     }
+  }
+
+  const uploadForm = document.getElementById("upload-form");
+  if (uploadForm) {
+    const maxBytes = parseInt(uploadForm.dataset.maxBytes || "20971520", 10);
+    const statusEl = document.getElementById("upload-status");
+    const progressFill = document.getElementById("upload-progress-fill");
+
+    uploadForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const fileInput = uploadForm.querySelector("#file");
+      const file = fileInput?.files?.[0];
+      if (!file) {
+        window.forumToast?.("Please choose a file.", "toast-error");
+        return;
+      }
+
+      if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+        window.forumToast?.("Only images or videos are allowed.", "toast-error");
+        return;
+      }
+
+      if (file.size > maxBytes) {
+        const mb = Math.ceil(maxBytes / (1024 * 1024));
+        window.forumToast?.(`File is too large. Max ${mb} MB.`, "toast-error");
+        return;
+      }
+
+      const submitButton = uploadForm.querySelector("button[type='submit']");
+      if (submitButton) {
+        submitButton.disabled = true;
+      }
+
+      const formData = new FormData(uploadForm);
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/upload");
+      xhr.withCredentials = true;
+      xhr.setRequestHeader("Accept", "text/html");
+
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const percent = Math.round((event.loaded / event.total) * 100);
+        progressFill.style.width = `${percent}%`;
+        statusEl.textContent = `Uploading... ${percent}%`;
+      };
+
+      xhr.onload = () => {
+        const target = xhr.responseURL || "/posts";
+        if (xhr.status >= 200 && xhr.status < 400) {
+          statusEl.textContent = "Upload complete. Redirecting...";
+          window.location.href = target;
+          return;
+        }
+
+        statusEl.textContent = "Upload failed. Try again.";
+        window.forumToast?.("Upload failed. Please try again.", "toast-error");
+        if (submitButton) {
+          submitButton.disabled = false;
+        }
+      };
+
+      xhr.onerror = () => {
+        statusEl.textContent = "Upload failed. Check your connection.";
+        window.forumToast?.("Network error. Please try again.", "toast-error");
+        if (submitButton) {
+          submitButton.disabled = false;
+        }
+      };
+
+      progressFill.style.width = "0%";
+      statusEl.textContent = "Starting upload...";
+      xhr.send(formData);
+    });
   }
 </script>
 {% endblock %}

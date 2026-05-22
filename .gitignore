@@ -5,12 +5,24 @@ build/
 dist/
 wheels/
 *.egg-info
+*.egg
+
+# Bytecode and tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # Virtual environments
-.venv
+.venv/
+venv/
+env/
 
 # Environment variables
 .env
+.env.*
 
 # IDE-specific files
 .vscode/
@@ -20,9 +32,19 @@ wheels/
 *.log
 *.tmp
 *.bak
+*.swp
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 
-# test scripts
-.pytest_cache/
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Local uploads (non-persistent on Render)
+static/uploads/
+
+# OS files
+.DS_Store
+Thumbs.db

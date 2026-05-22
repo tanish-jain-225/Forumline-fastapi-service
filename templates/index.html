@@ -6,8 +6,45 @@
     <p>{{ subtitle }}</p>
   </div>
   <div>
-    <a class="cta" href="/new">Start a Thread</a>
+    {% if request.state.user %}
+      <a class="cta" href="/new">Start a Thread</a>
+    {% else %}
+      <a class="cta" href="/register">Join to Start</a>
+    {% endif %}
   </div>
+</section>
+
+<section class="filter-bar">
+  <form class="filter-form" method="get" action="/">
+    <div class="filter-group">
+      <label for="search">Search</label>
+      <input id="search" name="q" type="search" placeholder="Search threads" value="{{ query }}" />
+    </div>
+    <div class="filter-group">
+      <label for="category">Category</label>
+      <select id="category" name="category">
+        <option value="">All categories</option>
+        {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if selected_category == cat.id|string %}selected{% endif %}>{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <input type="hidden" name="limit" value="{{ limit }}" />
+    <button class="cta" type="submit">Apply</button>
+  </form>
+
+  {% if query or selected_category %}
+    {% set selected = namespace(name="") %}
+    {% for cat in categories %}
+      {% if selected_category == cat.id|string %}
+        {% set selected.name = cat.name %}
+      {% endif %}
+    {% endfor %}
+    <div class="filter-summary">
+      <span class="muted">Results{% if query %} for "{{ query }}"{% endif %}{% if selected.name %} in {{ selected.name }}{% endif %}.</span>
+      <a class="btn-secondary" href="/">Clear filters</a>
+    </div>
+  {% endif %}
 </section>
 
 <section>
@@ -16,10 +53,18 @@
     {% for category in categories %}
       <a class="card" href="/c/{{ category.id }}">
         <h3>{{ category.name }}</h3>
-        <p class="muted">{{ category.description or "No description yet." }}</p>
+        <p class="muted clamp-2">{{ category.description or "No description yet." }}</p>
       </a>
     {% else %}
-      <div class="card">No categories yet. Create your first thread.</div>
+      <div class="card empty-card">
+        <h3>No categories yet</h3>
+        <p class="muted">Create the first space for your community to gather.</p>
+        {% if request.state.user %}
+          <a class="cta" href="/categories/new">Create a category</a>
+        {% else %}
+          <a class="cta" href="/register">Sign up to create</a>
+        {% endif %}
+      </div>
     {% endfor %}
   </div>
 </section>
@@ -30,16 +75,37 @@
     {% for thread in threads %}
       <a class="thread-item" href="/t/{{ thread.id }}">
         <h3>{{ thread.title }}</h3>
-        <p class="muted">{{ thread.body[:160] }}{% if thread.body|length > 160 %}...{% endif %}</p>
+        <p class="muted clamp-3">{{ thread.body }}</p>
         <div class="thread-meta">
-          <span>By {{ thread.user.email }}</span>
+          <span>By {{ thread.user.email.split('@')[0] }}</span>
           <span>Category: {{ thread.category.name }}</span>
           <span>{{ thread.created_at.strftime("%b %d, %Y") }}</span>
         </div>
       </a>
     {% else %}
-      <div class="thread-item">No threads yet. Be the first to post.</div>
+      <div class="thread-item empty-card">
+        <h3>No threads yet</h3>
+        <p class="muted">Start the conversation and set the tone.</p>
+        {% if request.state.user %}
+          <a class="cta" href="/new">Publish the first thread</a>
+        {% else %}
+          <a class="cta" href="/register">Sign up to post</a>
+        {% endif %}
+      </div>
     {% endfor %}
   </div>
+
+  {% if has_prev or has_next %}
+    {% set base_url = request.url.include_query_params(q=query, category=selected_category, limit=limit) %}
+    <div class="pagination">
+      {% if has_prev %}
+        <a class="btn-secondary" href="{{ base_url.include_query_params(offset=prev_offset) }}">Previous</a>
+      {% endif %}
+      <span class="muted">Page {{ (offset // limit) + 1 }}</span>
+      {% if has_next %}
+        <a class="btn-secondary" href="{{ base_url.include_query_params(offset=next_offset) }}">Next</a>
+      {% endif %}
+    </div>
+  {% endif %}
 </section>
 {% endblock %}

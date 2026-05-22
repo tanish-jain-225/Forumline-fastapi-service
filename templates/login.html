@@ -24,9 +24,11 @@
 <form class="form-card" method="post" action="/login">
   <label for="username">Email</label>
   <input id="username" name="username" type="email" placeholder="you@example.com" value="{{ username or '' }}" required />
+  <p class="field-hint">Use the email you registered with.</p>
 
   <label for="password">Password</label>
   <input id="password" name="password" type="password" placeholder="Your password" required />
+  <p class="field-hint">Keep it safe and private.</p>
 
   <button class="cta" type="submit">Log In</button>
 </form>

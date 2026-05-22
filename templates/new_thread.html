@@ -10,9 +10,11 @@
 <form class="form-card" method="post" action="/new">
   <label for="title">Title</label>
   <input id="title" name="title" placeholder="What is on your mind?" required />
+  <p class="field-hint">Keep it short and clear.</p>
 
   <label for="body">Body</label>
   <textarea id="body" name="body" placeholder="Share the full story" required></textarea>
+  <p class="field-hint">Add context, links, or the questions you want answered.</p>
 
   <label for="category_id">Category</label>
   <select id="category_id" name="category_id" required>
@@ -22,6 +24,7 @@
       <option disabled>No categories yet</option>
     {% endfor %}
   </select>
+  <p class="field-hint">Choose where this conversation belongs.</p>
 
   <button class="cta" type="submit">Publish Thread</button>
 </form>

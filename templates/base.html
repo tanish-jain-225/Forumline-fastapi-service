@@ -15,6 +15,7 @@
     <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
   </head>
   <body>
+    <div class="progress-bar" id="spa-progress" aria-hidden="true"></div>
     <header>
       <nav class="nav">
         <a href="/" class="brand">
@@ -31,7 +32,7 @@
               <span class="material-icons">account_circle</span>
               <span class="user-email-text">{{ request.state.user.email.split('@')[0] }}</span>
             </span>
-            <a href="/logout" class="btn-logout">Log Out</a>
+            <a href="/logout" class="btn-logout" data-no-spa>Log Out</a>
           {% else %}
             <a href="/login">Log In</a>
             <a href="/register">Sign Up</a>
@@ -39,15 +40,41 @@
         </div>
       </nav>
     </header>
-    <main>
+    <main class="page">
       {% block content %}{% endblock %}
     </main>
     <footer>
       Built with FastAPI. Keep it kind, keep it curious.
     </footer>
+    <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
     <script>
       (function () {
         let main = document.querySelector("main");
+        let header = document.querySelector("header");
+        let isNavigating = false;
+        const progress = document.getElementById("spa-progress");
+        const toastStack = document.getElementById("toast-stack");
+
+        function showToast(message, variant) {
+          if (!toastStack || !message) return;
+          const toast = document.createElement("div");
+          toast.className = `toast ${variant || "toast-info"}`;
+          toast.textContent = message;
+          toastStack.appendChild(toast);
+          requestAnimationFrame(() => toast.classList.add("toast-show"));
+          setTimeout(() => {
+            toast.classList.remove("toast-show");
+            setTimeout(() => toast.remove(), 300);
+          }, 3200);
+        }
+
+        window.forumToast = showToast;
+
+        function setLoading(state) {
+          document.body.classList.toggle("is-loading", Boolean(state));
+          if (!progress) return;
+          progress.classList.toggle("progress-active", Boolean(state));
+        }
 
         function isSameOrigin(url) {
           return new URL(url, window.location.href).origin === window.location.origin;
@@ -73,26 +100,88 @@
             ...options,
           };
 
-          const response = await fetch(url, {
-            method: config.method,
-            body: config.body,
-            headers: {
-              "X-Requested-With": "spa",
-              "Accept": "text/html",
-            },
-            credentials: "same-origin",
-          });
+          if (isNavigating) return;
+          isNavigating = true;
+          setLoading(true);
+
+          let response;
+
+          try {
+            response = await fetch(url, {
+              method: config.method,
+              body: config.body,
+              headers: {
+                "X-Requested-With": "spa",
+                "Accept": "text/html",
+              },
+              credentials: "same-origin",
+            });
+          } catch (error) {
+            setLoading(false);
+            isNavigating = false;
+            showToast("Network error. Please try again.", "toast-error");
+            return;
+          }
 
           if (!response.ok) {
-            window.location.href = url;
+            const contentType = response.headers.get("content-type") || "";
+            if (contentType.includes("application/json")) {
+              const data = await response.json().catch(() => ({}));
+              const message = data.detail || `Request failed (${response.status}).`;
+              showToast(message, "toast-error");
+              setLoading(false);
+              isNavigating = false;
+              return;
+            }
+
+            if (contentType.includes("text/html")) {
+              const html = await response.text();
+              const doc = new DOMParser().parseFromString(html, "text/html");
+              const nextMain = doc.querySelector("main");
+              const nextHeader = doc.querySelector("header");
+              if (nextHeader && header) {
+                header.replaceWith(nextHeader);
+                header = nextHeader;
+              }
+
+              if (nextMain) {
+                document.title = doc.title || document.title;
+                main.replaceWith(nextMain);
+                main = nextMain;
+                main.classList.add("page-enter");
+                setTimeout(() => main.classList.remove("page-enter"), 500);
+                runScripts(nextMain);
+              }
+              setLoading(false);
+              return;
+            }
+
+            setLoading(false);
+            isNavigating = false;
+            if (response.status === 401) {
+              window.location.href = "/login";
+              return;
+            }
+            showToast(`Something went wrong (${response.status}).`, "toast-error");
+            if (config.method === "GET") {
+              window.location.href = url;
+            }
             return;
           }
 
           const html = await response.text();
           const doc = new DOMParser().parseFromString(html, "text/html");
+          const nextHeader = doc.querySelector("header");
           const nextMain = doc.querySelector("main");
 
+          if (nextHeader && header) {
+            header.replaceWith(nextHeader);
+            header = nextHeader;
+          }
+
           if (!nextMain) {
+            setLoading(false);
+            isNavigating = false;
             window.location.href = url;
             return;
           }
@@ -100,6 +189,8 @@
           document.title = doc.title || document.title;
           main.replaceWith(nextMain);
           main = nextMain;
+          main.classList.add("page-enter");
+          setTimeout(() => main.classList.remove("page-enter"), 500);
           runScripts(nextMain);
 
           if (config.push) {
@@ -107,6 +198,8 @@
           }
 
           window.scrollTo(0, 0);
+          setLoading(false);
+          isNavigating = false;
         }
 
         document.addEventListener("click", (event) => {
@@ -137,7 +230,7 @@
           swapTo(url);
         });
 
-        document.addEventListener("submit", (event) => {
+        document.addEventListener("submit", async (event) => {
           const form = event.target;
           if (!(form instanceof HTMLFormElement)) return;
           if (form.hasAttribute("data-no-spa")) return;
@@ -148,22 +241,43 @@
 
           event.preventDefault();
 
+          const submitButton = form.querySelector("button[type='submit']");
+          if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.dataset.originalText = submitButton.textContent || "";
+            submitButton.textContent = "Working...";
+          }
+
           const method = (form.getAttribute("method") || "GET").toUpperCase();
           const formData = new FormData(form);
 
           if (method === "GET") {
             const params = new URLSearchParams(formData);
             const dest = url.split("?")[0] + (params.toString() ? `?${params.toString()}` : "");
-            swapTo(dest);
+            await swapTo(dest);
+            if (submitButton) {
+              submitButton.disabled = false;
+              submitButton.textContent = submitButton.dataset.originalText || "Submit";
+            }
             return;
           }
 
-          swapTo(url, { method, body: formData });
+          await swapTo(url, { method, body: formData });
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = submitButton.dataset.originalText || "Submit";
+          }
         });
 
         window.addEventListener("popstate", () => {
           swapTo(window.location.href, { push: false });
         });
+
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("category") === "created") {
+          showToast("Category created successfully.", "toast-success");
+        }
       })();
     </script>
   </body>
