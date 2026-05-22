@@ -7,7 +7,7 @@
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Forumline** is an industry-grade, production-ready asynchronous web service built with FastAPI. It delivers a fast, responsive Discussion Forum and Media Upload Feed coupled with a zero-dependency SPA client-side router. The system is engineered to run seamlessly across both local development sandboxes (e.g. SQLite, local disks) and cloud environments (e.g. Render, PostgreSQL, ImageKit CDN).
+**Forumline** is a production-ready FastAPI web service with a discussion forum, media feed, and a lightweight SPA-style navigation layer. It is built to run cleanly in local dev (SQLite + local uploads) and in cloud deployments (Render + PostgreSQL + ImageKit CDN fallback).
 
 ---
 
@@ -32,6 +32,8 @@
     - [1. Authentication & Session Handlers](#1-authentication--session-handlers)
     - [2. Forums, Categories \& Discussion Threads](#2-forums-categories--discussion-threads)
     - [3. Media Upload Feed](#3-media-upload-feed)
+  - [🚦 Search, Filters & Pagination](#-search-filters--pagination)
+  - [📤 Upload Limits & Validation](#-upload-limits--validation)
   - [☁️ Production Deployment Checklist (Render & Cloud PostgreSQL)](#️-production-deployment-checklist-render--cloud-postgresql)
 
 ---
@@ -94,13 +96,14 @@ The identity layer uses **FastAPI Users** to provide two parallel authentication
 
 ## 📂 Directory & Code Symbol Index
 
-* [main.py](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/main.py) - Main entrypoint to load `.env` variables and start the Uvicorn web server instance.
-* [app/app.py](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/app/app.py) - Application initialization, lifespan hooks, custom template routers, static file mounts, global error handlers, and core route paths.
-* [app/auth.py](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/app/auth.py) - User management configuration, JWT strategies, cookie transports, and user routers injection.
-* [app/db.py](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/app/db.py) - SQLAlchemy async DB engines configuration, schema model definitions ([User](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/app/db.py#L25), [Category](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/app/db.py#L31), [Thread](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/app/db.py#L42), [Comment](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/app/db.py#L59), [Post](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/app/db.py#L73)), and helper functions.
-* [app/images.py](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/app/images.py) - ImageKit CDN client helper initialization and key setup.
-* [app/schemas.py](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/app/schemas.py) - Unified request validation schemas and API response schemas using Pydantic.
-* [tests/test_auth_flow.py](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/tests/test_auth_flow.py) - Complete integration test flows covering registration, log in, thread creations, and comment edits.
+* main.py - Main entrypoint to load `.env` variables and start the Uvicorn server.
+* app/app.py - Application initialization, lifespan hooks, routes, and core handlers.
+* app/auth.py - User management, JWT strategies, and cookie transport configuration.
+* app/db.py - SQLAlchemy async engine and model definitions.
+* app/images.py - ImageKit CDN client initialization.
+* app/schemas.py - Pydantic schemas for request/response payloads.
+* templates/ - Jinja templates for forum, feed, and auth pages.
+* static/ - CSS, logos, and local upload storage (for dev only).
 
 ---
 
@@ -118,6 +121,7 @@ Create a `.env` configuration file in the root directory. Below is the configura
 | `PORT` | `8000` | `8000` | Port allocation for incoming network traffic. |
 | `RELOAD` | `true` | `false` | Enables/disables live code reloading on files modification. |
 | `IMAGEKIT_PRIVATE_KEY` | *(Optional)* | `private_...` | API key for ImageKit CDN. If missing, uploads fallback to local storage. |
+| `MAX_UPLOAD_BYTES` | `20971520` | `20971520` | Max upload size in bytes (default 20MB). |
 
 ---
 
@@ -149,9 +153,9 @@ Create a `.env` configuration file in the root directory. Below is the configura
 
 3. **Install Dependencies**
    Use `uv` to sync libraries and setup the virtual environment:
-   ```bash
-   uv sync --all-extras
-   ```
+  ```bash
+  uv sync --all-extras
+  ```
 
 4. **Start the Application**
    Run the application web server locally:
@@ -175,6 +179,10 @@ Alembic handles database structure, schema modifications, and migration historie
 * **Manually run upgrades**:
   ```bash
   uv run alembic upgrade head
+  ```
+* **If your DB already has tables and you want to align Alembic without recreating them**:
+  ```bash
+  uv run alembic stamp head
   ```
 * **Revert the last schema change**:
   ```bash
@@ -221,16 +229,45 @@ uv run pytest
 | Method | Endpoint | Description | Request Structure / Headers |
 | :---: | :--- | :--- | :--- |
 | `GET` | `/` | Main discussion board page (returns thread cards) | HTML Page Response |
-| `POST` | `/categories` | Create a new discussion category (Admin / JSON API) | JSON payload: `name`, `description` |
+| `GET` | `/categories/new` | Create category form | HTML Page Response |
+| `POST` | `/categories/new` | Create a new category | Form-Data: `name`, `description` |
 | `POST` | `/new` | Publish a new discussion thread | Form-Data: `title`, `body`, `category_id` |
-| `POST` | `/threads/{thread_id}/comments` | Add a comment response | Form-Data: `body` |
+| `POST` | `/t/{thread_id}/comment` | Add a comment response | Form-Data: `body` |
 
 ### 3. Media Upload Feed
 
 | Method | Endpoint | Description | Request Structure / Headers |
 | :---: | :--- | :--- | :--- |
-| `GET` | `/feed` | Get all media posts (JSON API format) | Returns list of `PostRead` values |
+| `GET` | `/posts` | Media feed page | HTML Page Response |
+| `GET` | `/feed` | Get media posts (JSON API format) | Returns list of `PostRead` values |
 | `POST` | `/upload` | Upload media post | Multipart Form-Data: `file`, `caption`, `content` |
+---
+
+## 🚦 Search, Filters & Pagination
+
+The forum supports search and category filtering on the home page:
+
+* Search query: `/?q=fastapi`
+* Category filter: `/?category=<uuid>`
+* Pagination: `/?limit=10&offset=0`
+
+The media feed supports pagination via:
+
+* `/posts?limit=24&offset=0`
+
+Limits are clamped for safety: forum pages max 25, feed pages max 50.
+
+---
+
+## 📤 Upload Limits & Validation
+
+Uploads are validated on both client and server:
+
+* Max size: `MAX_UPLOAD_BYTES` (default 20MB)
+* Allowed types: images and videos only
+* Client UI shows upload progress and validates before upload
+
+If `IMAGEKIT_PRIVATE_KEY` is not set, uploads fall back to local storage under `static/uploads/` (not persistent on Render).
 | `PATCH` | `/posts/{post_id}` | Edit an upload post | Form-Data: `caption` *(optional)*, `content` *(optional)* |
 | `DELETE` | `/posts/{post_id}` | Delete a media post and assets | Authentication header checks apply |
 
@@ -251,10 +288,10 @@ Follow these steps to deploy this application to Render:
 3. **Service Build & Launch Commands**:
    * **Build Command**:
      ```bash
-     uv pip install --system -r pyproject.toml
+     pip install uv && uv sync --frozen --no-dev
      ```
    * **Start Command**:
      ```bash
-     python main.py
+     uv run python main.py
      ```
      *(The lifespan hook will automatically apply migrations to your Render database on startup before the server starts receiving requests).*
