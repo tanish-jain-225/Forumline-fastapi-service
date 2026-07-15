@@ -750,7 +750,7 @@ async def delete_post(
         if post.user_id != user.id:
             raise HTTPException(status_code=403, detail="Not allowed to delete this post")
         
-        await session.delete(post) # Mark the post for deletion in the database session. This prepares the post to be removed from the database when we commit the transaction. The post object is added to the session's list of pending deletions, and it will be deleted from the database when we call session.commit().
+        await session.delete(post) # Mark the post for deletion in the database session. This prepares the post to be removed from the database when we commit the transaction. The post object is added to the session's list of pending deletions and it will be deleted from the database when we call session.commit().
         await session.commit() # Commit the transaction to delete the post from the database. This is necessary to persist the changes made to the database session, such as deleting a post, so that it is removed from the database and can no longer be retrieved later.
 
         return {"detail": "Post deleted successfully"} # Return a success message indicating that the post was deleted successfully. This response will be sent back to the client to confirm that the deletion operation was completed without any issues.

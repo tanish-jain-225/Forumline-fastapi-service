@@ -7,7 +7,7 @@
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Forumline** is a production-ready FastAPI web service with a discussion forum, media feed, and a lightweight SPA-style navigation layer. It is built to run cleanly in local dev (SQLite + local uploads) and in cloud deployments (Render + PostgreSQL + ImageKit CDN fallback).
+**Forumline** is a production-ready FastAPI web service with a discussion forum, media feed and a lightweight SPA-style navigation layer. It is built to run cleanly in local dev (SQLite + local uploads) and in cloud deployments (Render + PostgreSQL + ImageKit CDN fallback).
 
 ---
 
@@ -40,7 +40,7 @@
 
 ## 🏗️ System Architecture
 
-The following diagram illustrates the routing layout, core FastAPI handlers, service integrations, and physical persistence layers:
+The following diagram illustrates the routing layout, core FastAPI handlers, service integrations and physical persistence layers:
 
 ```mermaid
 flowchart TD
@@ -97,13 +97,13 @@ The identity layer uses **FastAPI Users** to provide two parallel authentication
 ## 📂 Directory & Code Symbol Index
 
 * main.py - Main entrypoint to load `.env` variables and start the Uvicorn server.
-* app/app.py - Application initialization, lifespan hooks, routes, and core handlers.
-* app/auth.py - User management, JWT strategies, and cookie transport configuration.
+* app/app.py - Application initialization, lifespan hooks, routes and core handlers.
+* app/auth.py - User management, JWT strategies and cookie transport configuration.
 * app/db.py - SQLAlchemy async engine and model definitions.
 * app/images.py - ImageKit CDN client initialization.
 * app/schemas.py - Pydantic schemas for request/response payloads.
-* templates/ - Jinja templates for forum, feed, and auth pages.
-* static/ - CSS, logos, and local upload storage (for dev only).
+* templates/ - Jinja templates for forum, feed and auth pages.
+* static/ - CSS, logos and local upload storage (for dev only).
 
 ---
 
@@ -169,7 +169,7 @@ Create a `.env` configuration file in the root directory. Below is the configura
 
 ## 💾 Database Migrations (Alembic Operations)
 
-Alembic handles database structure, schema modifications, and migration histories.
+Alembic handles database structure, schema modifications and migration histories.
 
 * **Generate a new Migration Script**:
   After updating tables or models in [db.py](file:///d:/_Coding_Tutorials_Only_Important_Ones/Fast-API-Tutorial/app/db.py), generate a new revision:
@@ -202,7 +202,7 @@ Alembic handles database structure, schema modifications, and migration historie
 
 ## 🧪 Test Suite Execution
 
-Automated E2E integration test runs evaluate user registries, authentication flows, JWT token validations, database cascade deletes, comments, and media post uploads.
+Automated E2E integration test runs evaluate user registries, authentication flows, JWT token validations, database cascade deletes, comments and media post uploads.
 
 Execute the test suite using `uv`:
 ```bash
@@ -281,7 +281,7 @@ Follow these steps to deploy this application to Render:
    Create a Render PostgreSQL instance. Set the database connection parameter in the environment. Make sure it uses the `postgresql+asyncpg://` schema prefix so SQLAlchemy uses the correct asynchronous driver.
 
 2. **Configure Environment Variables in Render**:
-   * Set `APP_ENV` to `production` (This turns off reload, enables secure HTTPS cookie configurations, and scopes error details).
+   * Set `APP_ENV` to `production` (This turns off reload, enables secure HTTPS cookie configurations and scopes error details).
    * Set `JWT_SECRET` to a high-entropy cryptographically secure secret.
    * Provide `IMAGEKIT_PRIVATE_KEY` to enable CDN-based image storage.
 
